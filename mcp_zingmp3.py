@@ -1,5 +1,5 @@
 # File: mcp_zingmp3.py
-# ĐÃ GỘP CHUNG TỪ zmp3.py và mcp_zingmp3.py
+# PHIÊN BẢN TEST (FIX CỨNG) - CẢNH BÁO BẢO MẬT
 
 import mcp.types as types
 from mcp.server.fastmcp import FastMCP
@@ -17,34 +17,19 @@ from urllib.parse import quote
 
 URL = "https://zingmp3.vn"
 
-# --- Logic tải cấu hình an toàn ---
+# --- Logic tải cấu hình (ĐÃ FIX CỨNG) ---
+# CÁC KHÓA BÍ MẬT CỦA BẠN ĐƯỢC GHI TRỰC TIẾP TẠI ĐÂY
+try:
+    version = "1.16.5"
+    akey = "X5BM3w8N7MKozC0B85o4KMlzLZKhV00y"
+    skey = "acOrvUS15XRW2o9JksiK1KgQ6Vbds8ZW"
+    
+    if not all([version, akey, skey]):
+        raise ValueError("Giá trị fix cứng bị thiếu")
 
-# 1. Ưu tiên đọc từ biến môi trường (an toàn cho server/MCP Hub)
-ZING_VERSION = os.environ.get("ZING_VERSION")
-ZING_AKEY = os.environ.get("ZING_AKEY_R") # Tên biến 'r' trong config.json
-ZING_SKEY = os.environ.get("ZING_SKEY_I") # Tên biến 'i' trong config.json
-
-# 2. Kiểm tra xem các biến có tồn tại không
-if all([ZING_VERSION, ZING_AKEY, ZING_SKEY]):
-    # Nếu tất cả đều có, gán giá trị từ biến môi trường
-    version, akey, skey = ZING_VERSION, ZING_AKEY, ZING_SKEY
-else:
-    # 3. Nếu không có, thử đọc từ file config.json (để chạy local)
-    try:
-        cfg = json.load(open("config.json", encoding="utf-8"))
-        version, akey, skey = cfg["version"], cfg["r"], cfg["i"]
-    except FileNotFoundError:
-        # 4. Nếu cả hai đều thất bại, in lỗi và thoát
-        print(
-            "LỖI NGHIÊM TRỌNG: Không thể tải cấu hình Zing MP3.",
-            file=sys.stderr
-        )
-        print(
-            "Hãy đảm bảo file 'config.json' tồn tại",
-            "hoặc đặt các biến môi trường: ZING_VERSION, ZING_AKEY_R, ZING_SKEY_I",
-            file=sys.stderr
-        )
-        sys.exit(1) # Thoát tiến trình với mã lỗi
+except Exception as e:
+    print(f"LỖI NGHIÊM TRỌNG: Không thể tải cấu hình fix cứng: {e}", file=sys.stderr)
+    sys.exit(1) # Thoát tiến trình với mã lỗi
 
 # --- Kết thúc logic tải cấu hình ---
 
@@ -83,7 +68,7 @@ get_stream = lambda song_id: zingmp3("/api/v2/song/get/streaming", {"id": song_i
 get_lyric = lambda song_id: zingmp3("/api/v2/lyric/get/lyric", {"id": song_id})
 
 # ===================================================================
-# NỘI DUNG TỪ mcp_zingmp3.py (ĐÃ BỎ IMPORT LỖI)
+# NỘI DUNG TỪ mcp_zingmp3.py
 # ===================================================================
 
 # --- HÀM HỖ TRỢ PHÂN TÍCH LYRIC ---
@@ -119,7 +104,7 @@ def parse_lrc_to_json(lrc_content: str) -> List[Dict[str, Any]]:
 
 
 # Khởi tạo máy chủ MCP
-server = FastMCP("zingmp3-tools")
+server = FastMCP("zingmp3-tools-hardcoded-test")
 
 @server.tool()
 def search_zing_songs(query: str, count: int = 5) -> List[Dict[str, str]]:
@@ -128,9 +113,8 @@ def search_zing_songs(query: str, count: int = 5) -> List[Dict[str, str]]:
     Trả về một danh sách các bài hát khớp với từ khóa.
     """
     try:
-        # HÀM search_song() GIỜ ĐÃ TỒN TẠI TRONG CÙNG FILE NÀY
         search_data = search_song(query, count=count) 
-        if not search_data.get("data") or not search_data["data"].get("items"):
+        if not search_data.get("data") or not search_data.get("items"):
             return []
         
         songs_list = search_data["data"]["items"]
@@ -157,7 +141,6 @@ def get_zing_song_details(song_id: str) -> Dict[str, Any]:
         return {"error": "Thiếu song_id"}
 
     try:
-        # CÁC HÀM get_song(), get_stream(), get_lyric() GIỜ ĐÃ TỒN TẠI Ở TRÊN
         song_info = get_song(song_id)
         if song_info.get("err") != 0:
             return {"error": song_info.get("msg", "Lỗi khi lấy thông tin bài hát")}
@@ -208,7 +191,7 @@ def get_zing_song_details(song_id: str) -> Dict[str, Any]:
 
 def main():
     """Hàm main để chạy server."""
-    print("Đang khởi động Zing MP3 MCP Server (Phiên bản GỘP)...")
+    print("Đang khởi động Zing MP3 MCP Server (PHIÊN BẢN FIX CỨNG)...")
     server.run()
 
 if __name__ == "__main__":
