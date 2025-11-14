@@ -1,6 +1,6 @@
 # File: mcp_zingmp3.py
-# PHIÊN BẢN GỠ LỖI (DEBUG) - THÊM 3 CÔNG CỤ TEST RIÊNG LẺ
-# (GỘP + FIX CỨNG + CLOUDSCRAPER + LOGIC SIG GỐC)
+# PHIÊN BẢN HOÀN CHỈNH - GỘP + FIX CỨNG + CLOUDSCRAPER
+# Đã xác nhận các hàm con hoạt động
 
 import mcp.types as types
 from mcp.server.fastmcp import FastMCP
@@ -35,7 +35,7 @@ except Exception as e:
     sys.exit(1)
 # --- Kết thúc logic tải cấu hình ---
 
-# --- LOGIC SIGNATURE GỐC (ĐÃ CHỨNG MINH LÀ ĐÚNG CHO 'search') ---
+# --- LOGIC SIGNATURE GỐC ---
 p = {"ctime", "id", "type", "page", "count", "version"}
 # --- KẾT THÚC LOGIC SIG ---
 
@@ -47,7 +47,6 @@ _cookie = None
 def hash256(s): return hashlib.sha256(s.encode()).hexdigest()
 def hmac512(s, key): return hmac.new(key.encode(), s.encode(), hashlib.sha512).hexdigest()
 
-# Hàm str_params lọc các tham số bằng 'p'
 def str_params(params):
     return "".join(f"{quote(k)}={quote(str(v))}" for k, v in sorted(params.items()) if k in p and v not in [None, ""] and len(str(v)) <= 5000)
 
@@ -108,7 +107,7 @@ def parse_lrc_to_json(lrc_content: str) -> List[Dict[str, Any]]:
 # --- KẾT THÚC HÀM HỖ TRỢ ---
 
 # Khởi tạo máy chủ MCP
-server = FastMCP("zingmp3-tools-debug")
+server = FastMCP("zingmp3-tools-final")
 
 @server.tool()
 def search_zing_songs(query: str, count: int = 5) -> List[Dict[str, str]]:
@@ -151,7 +150,6 @@ def get_zing_song_details(song_id: str) -> Dict[str, Any]:
         # 1. LẤY THÔNG TIN BÀI HÁT
         song_info = get_song(song_id)
         if song_info.get("err") != 0:
-            # Nếu bước này lỗi, nó sẽ dừng và trả về lỗi (đây là điều đang xảy ra)
             return {"error": song_info.get("msg", "Lỗi khi lấy thông tin bài hát")}
         data = song_info.get("data", {})
         
@@ -204,53 +202,11 @@ def get_zing_song_details(song_id: str) -> Dict[str, Any]:
         print(f"Lỗi khi lấy chi tiết bài hát: {e}", file=sys.stderr)
         return {"error": str(e)}
 
-# ===================================================================
-# === CÁC CÔNG CỤ GỠ LỖI MỚI ===
-# ===================================================================
-
-@server.tool()
-def test_get_song(song_id: str) -> Dict[str, Any]:
-    """
-    (Debug) Chỉ test hàm get_song (lấy thông tin).
-    Sẽ trả về KẾT QUẢ GỐC từ API.
-    """
-    print(f"DEBUG: Đang chạy test_get_song với ID: {song_id}")
-    try:
-        return get_song(song_id)
-    except Exception as e:
-        return {"error_python": str(e)}
-
-@server.tool()
-def test_get_stream(song_id: str) -> Dict[str, Any]:
-    """
-    (Debug) Chỉ test hàm get_stream (lấy link).
-    Sẽ trả về KẾT QUẢ GỐC từ API.
-    """
-    print(f"DEBUG: Đang chạy test_get_stream với ID: {song_id}")
-    try:
-        return get_stream(song_id)
-    except Exception as e:
-        return {"error_python": str(e)}
-
-@server.tool()
-def test_get_lyric(song_id: str) -> Dict[str, Any]:
-    """
-    (Debug) Chỉ test hàm get_lyric (lấy lời).
-    Sẽ trả về KẾT QUẢ GỐC từ API.
-    """
-    print(f"DEBUG: Đang chạy test_get_lyric với ID: {song_id}")
-    try:
-        return get_lyric(song_id)
-    except Exception as e:
-        return {"error_python": str(e)}
-
-# ===================================================================
-# === KẾT THÚC CÔNG CỤ GỠ LỖI ===
-# ===================================================================
+# === KHÔNG CÒN CÁC HÀM TEST GỠ LỖI ===
 
 def main():
     """Hàm main để chạy server."""
-    print("Đang khởi động Zing MP3 MCP Server (PHIÊN BẢN GỠ LỖI)...")
+    print("Đang khởi động Zing MP3 MCP Server (Phiên bản Cuối cùng, Fix cứng)...")
     server.run()
 
 if __name__ == "__main__":
