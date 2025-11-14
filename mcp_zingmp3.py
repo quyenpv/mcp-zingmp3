@@ -1,6 +1,6 @@
 # File: mcp_zingmp3.py
-# PHIÊN BẢN CUỐI CÙNG - GỘP + FIX CỨNG + CLOUDSCRAPER
-# SỬA LỖI SIGNATURE: ĐÃ XÓA "id" KHỎI DANH SÁCH 'p'
+# PHIÊN BẢN GỠ LỖI (DEBUG) - THÊM 3 CÔNG CỤ TEST RIÊNG LẺ
+# (GỘP + FIX CỨNG + CLOUDSCRAPER + LOGIC SIG GỐC)
 
 import mcp.types as types
 from mcp.server.fastmcp import FastMCP
@@ -33,14 +33,11 @@ try:
 except Exception as e:
     print(f"LỖI NGHIÊM TRỌNG: Không thể tải cấu hình fix cứng: {e}", file=sys.stderr)
     sys.exit(1)
-
 # --- Kết thúc logic tải cấu hình ---
 
-# === SỬA LỖI SIGNATURE ===
-# 'p' là danh sách các tham số cho chữ ký
-# ĐÃ XÓA "id" ra khỏi danh sách này.
-p = {"ctime", "type", "page", "count", "version"}
-# === KẾT THÚC SỬA LỖI ===
+# --- LOGIC SIGNATURE GỐC (ĐÃ CHỨNG MINH LÀ ĐÚNG CHO 'search') ---
+p = {"ctime", "id", "type", "page", "count", "version"}
+# --- KẾT THÚC LOGIC SIG ---
 
 # Khởi tạo session bằng cloudscraper
 session = cloudscraper.create_scraper() 
@@ -67,18 +64,12 @@ def get_cookie(force=False):
 def zingmp3(path, extra=None):
     now = str(int(time.time()))
     params = {"ctime": now, "version": version, "apiKey": akey, **(extra or {})}
-    
-    # get_sig sẽ gọi str_params, 
-    # str_params SẼ LỌC RA 'apiKey', 'q', và 'id'
-    # Chỉ giữ lại 'ctime', 'version', 'type', 'count' (nếu có)
     params["sig"] = get_sig(path, params)
-    
     cookie_header = get_cookie()
     headers = {"Cookie": cookie_header} if cookie_header else {}
-    
     return session.get(f"{URL}{path}", headers=headers, params=params, timeout=10).json()
 
-# api (Giữ nguyên)
+# api
 chart_home = lambda: zingmp3("/api/v2/page/get/chart-home")
 search_song = lambda q, count=10: zingmp3("/api/v2/search", {"q": q, "type": "song", "count": count, "allowCorrect": 1})
 get_song = lambda song_id: zingmp3("/api/v2/song/get/info", {"id": song_id})
@@ -117,7 +108,7 @@ def parse_lrc_to_json(lrc_content: str) -> List[Dict[str, Any]]:
 # --- KẾT THÚC HÀM HỖ TRỢ ---
 
 # Khởi tạo máy chủ MCP
-server = FastMCP("zingmp3-tools-final-sig-fix-2")
+server = FastMCP("zingmp3-tools-debug")
 
 @server.tool()
 def search_zing_songs(query: str, count: int = 5) -> List[Dict[str, str]]:
@@ -126,7 +117,6 @@ def search_zing_songs(query: str, count: int = 5) -> List[Dict[str, str]]:
     Trả về một danh sách các bài hát khớp với từ khóa.
     """
     try:
-        # API tìm kiếm không cần chữ ký 'id', nó sẽ hoạt động
         search_data = search_song(query, count=count) 
         if search_data.get("err", 0) != 0:
              print(f"Lỗi API khi tìm kiếm: {search_data.get('msg')}", file=sys.stderr)
@@ -158,16 +148,17 @@ def get_zing_song_details(song_id: str) -> Dict[str, Any]:
         return {"error": "Thiếu song_id"}
 
     try:
-        # API này CẦN chữ ký. 
-        # Lần này chữ ký sẽ được tạo mà KHÔNG CÓ 'id'
+        # 1. LẤY THÔNG TIN BÀI HÁT
         song_info = get_song(song_id)
         if song_info.get("err") != 0:
+            # Nếu bước này lỗi, nó sẽ dừng và trả về lỗi (đây là điều đang xảy ra)
             return {"error": song_info.get("msg", "Lỗi khi lấy thông tin bài hát")}
         data = song_info.get("data", {})
         
         composers = data.get("composers", [])
         author_names = ", ".join([c["name"] for c in composers if c.get("name")]) or "Không rõ"
 
+        # 2. LẤY STREAM
         stream_info = get_stream(song_id)
         if stream_info.get("err") != 0:
              print(f"Lỗi API khi lấy stream: {stream_info.get('msg')}", file=sys.stderr)
@@ -179,6 +170,7 @@ def get_zing_song_details(song_id: str) -> Dict[str, Any]:
             elif stream_url == "VIP":
                 stream_url = "Đây là bài hát VIP, cần tài khoản Premium."
 
+        # 3. LẤY LYRIC
         lyric_info = get_lyric(song_id)
         lyric_json = []
         
@@ -212,9 +204,53 @@ def get_zing_song_details(song_id: str) -> Dict[str, Any]:
         print(f"Lỗi khi lấy chi tiết bài hát: {e}", file=sys.stderr)
         return {"error": str(e)}
 
+# ===================================================================
+# === CÁC CÔNG CỤ GỠ LỖI MỚI ===
+# ===================================================================
+
+@server.tool()
+def test_get_song(song_id: str) -> Dict[str, Any]:
+    """
+    (Debug) Chỉ test hàm get_song (lấy thông tin).
+    Sẽ trả về KẾT QUẢ GỐC từ API.
+    """
+    print(f"DEBUG: Đang chạy test_get_song với ID: {song_id}")
+    try:
+        return get_song(song_id)
+    except Exception as e:
+        return {"error_python": str(e)}
+
+@server.tool()
+def test_get_stream(song_id: str) -> Dict[str, Any]:
+    """
+    (Debug) Chỉ test hàm get_stream (lấy link).
+    Sẽ trả về KẾT QUẢ GỐC từ API.
+    """
+    print(f"DEBUG: Đang chạy test_get_stream với ID: {song_id}")
+    try:
+        return get_stream(song_id)
+    except Exception as e:
+        return {"error_python": str(e)}
+
+@server.tool()
+def test_get_lyric(song_id: str) -> Dict[str, Any]:
+    """
+    (Debug) Chỉ test hàm get_lyric (lấy lời).
+    Sẽ trả về KẾT QUẢ GỐC từ API.
+    """
+    print(f"DEBUG: Đang chạy test_get_lyric với ID: {song_id}")
+    try:
+        return get_lyric(song_id)
+    except Exception as e:
+        return {"error_python": str(e)}
+
+# ===================================================================
+# === KẾT THÚC CÔNG CỤ GỠ LỖI ===
+# ===================================================================
+
 def main():
     """Hàm main để chạy server."""
-    print("Đang khởi động Zing MP3 MCP Server (Phiên bản GỘP, FIX CỨNG, CLOUDSCRAPER, SỬA SIG)...")
+    print("Đang khởi động Zing MP3 MCP Server (PHIÊN BẢN GỠ LỖI)...")
     server.run()
 
 if __name__ == "__main__":
