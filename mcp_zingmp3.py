@@ -51,8 +51,8 @@ def hash256(s): return hashlib.sha256(s.encode()).hexdigest()
 def hmac512(s, key): return hmac.new(key.encode(), s.encode(), hashlib.sha512).hexdigest()
 
 def str_params(params):
-    return "".join(f"{quote(k)}={quote(str(v))}" for k, v in sorted(params.items()) if k in p and v not in [None, ""] and len(str(v)) <= 5000)
-
+    return "".join(f"{quote(k)}={quote(str(v))}" for k, v in sorted(params.items()) if v not in [None, ""] and len(str(v)) <= 5000)
+    
 def get_sig(path, params): 
     return hmac512(path + hash256(str_params(params)), skey)
 
