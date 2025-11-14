@@ -1,10 +1,11 @@
 [project]
 name = "mcp-zingmp3"
-version = "0.1.1" # Tăng phiên bản
+version = "0.1.2" # Tăng phiên bản
 description = "MCP server cho tìm kiếm và lấy link Zing MP3"
 dependencies = [
     "mcp",
     "requests",
+    "cloudscraper"  # <-- THÊM THƯ VIỆN NÀY
 ]
 # Chỉ cần build 1 module duy nhất
 py-modules = ["mcp_zingmp3"]
