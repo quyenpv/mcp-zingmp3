@@ -38,7 +38,7 @@ except Exception as e:
 
 # === KHÔI PHỤC LOGIC SIGNATURE GỐC ===
 # 'p' là danh sách các tham số ĐƯỢC PHÉP có trong chữ ký
-p = {"ctime", "id", "type", "page", "count", "version"}
+p = {"ctime", "id", "type", "page", "count", "version", "apiKey"} # <-- THÊM "apiKey" VÀO ĐÂY
 # === KẾT THÚC KHÔI PHỤC ===
 
 # Khởi tạo session bằng cloudscraper
