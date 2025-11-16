@@ -272,7 +272,7 @@ def get_youtube_music_stream(video_id: str) -> Dict[str, Any]:
         
         # Cấu hình yt-dlp
         ydl_opts = {
-            'format': 'bestaudio[ext=m4a]/bestaudio/best', # Lấy audio M4A tốt nhất, hoặc audio tốt nhất
+            'format': 'bestaudio[ext=mp3]/bestaudio/best', # Lấy audio M4A tốt nhất, hoặc audio tốt nhất
             'quiet': True,        # Không in ra console
             'noplaylist': True,   # Không xử lý playlist
         }
