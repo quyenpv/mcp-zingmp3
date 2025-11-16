@@ -1,6 +1,6 @@
 # File: mcp_zingmp3.py
-# PHIÊN BẢN MỞ RỘNG: Bao gồm Zing MP3 (fix cứng) VÀ YouTube Music
-# ĐÃ CHUYỂN TỪ PYTUBE SANG YT-DLP
+# PHIÊN BẢN SỬA LỖI 302 (CHUYỂN HƯỚNG)
+# Logic giải quyết 302 đã được thêm vào cả Zing và YouTube.
 
 import mcp.types as types
 from mcp.server.fastmcp import FastMCP
@@ -16,8 +16,7 @@ import cloudscraper
 # --- THÊM IMPORT CHO YOUTUBE MUSIC (ĐÃ SỬA) ---
 try:
     from ytmusicapi import YTMusic
-    # from pytube import YouTube # <-- XÓA DÒNG NÀY
-    import yt_dlp               # <-- THÊM DÒNG NÀY
+    import yt_dlp
 except ImportError:
     print("LỖI NGHIÊM TRỌNG: Không tìm thấy thư viện ytmusicapi hoặc yt-dlp.", file=sys.stderr)
     print("Hãy đảm bảo pyproject.toml đã bao gồm 'ytmusicapi' và 'yt-dlp'", file=sys.stderr)
@@ -51,6 +50,7 @@ p = {"ctime", "id", "type", "page", "count", "version"}
 # --- KẾT THÚC LOGIC SIG ---
 
 # Khởi tạo session bằng cloudscraper (CHO ZING)
+# Cloudscraper sẽ xử lý cookie và giả mạo User-Agent
 session = cloudscraper.create_scraper() 
 _cookie = None
 
@@ -73,9 +73,13 @@ def get_sig(path, params):
 def get_cookie(force=False):
     global _cookie
     if _cookie and not force: return _cookie
-    r = session.get(URL, timeout=10) 
-    _cookie = "; ".join(f"{k}={v}" for k, v in r.cookies.items()) or None
-    return _cookie
+    try:
+        r = session.get(URL, timeout=10) 
+        _cookie = "; ".join(f"{k}={v}" for k, v in r.cookies.items()) or None
+        return _cookie
+    except Exception as e:
+        print(f"Lỗi khi lấy cookie Zing: {e}", file=sys.stderr)
+        return None
 
 def zingmp3(path, extra=None):
     now = str(int(time.time()))
@@ -83,6 +87,7 @@ def zingmp3(path, extra=None):
     params["sig"] = get_sig(path, params)
     cookie_header = get_cookie()
     headers = {"Cookie": cookie_header} if cookie_header else {}
+    # Sử dụng session (cloudscraper) để gọi
     return session.get(f"{URL}{path}", headers=headers, params=params, timeout=10).json()
 
 # api (CHO ZING)
@@ -127,7 +132,7 @@ def parse_lrc_to_json(lrc_content: str) -> List[Dict[str, Any]]:
 server = FastMCP("music-tools-server") 
 
 # ===================================================================
-# === CÔNG CỤ ZING MP3 (GIỮ NGUYÊN) ===
+# === CÔNG CỤ ZING MP3 (ĐÃ SỬA LỖI 302) ===
 # ===================================================================
 
 @server.tool()
@@ -161,7 +166,7 @@ def search_zing_songs(query: str, count: int = 5) -> List[Dict[str, str]]:
 @server.tool()
 def get_zing_song_details(song_id: str) -> Dict[str, Any]:
     """
-    Lấy thông tin chi tiết, link stream 128kbps và lời bài hát (dạng JSON)
+    Lấy thông tin chi tiết, link stream 128kbps (ĐÃ GIẢI QUYẾT 302) và lời bài hát
     cho một song_id cụ thể của Zing MP3.
     """
     if not song_id:
@@ -179,30 +184,57 @@ def get_zing_song_details(song_id: str) -> Dict[str, Any]:
 
         # 2. LẤY STREAM
         stream_info = get_stream(song_id)
+        final_stream_url = None # Sẽ chứa link cuối cùng
+        
         if stream_info.get("err") != 0:
              print(f"Lỗi API Zing khi lấy stream: {stream_info.get('msg')}", file=sys.stderr)
-             stream_url = f"Không thể lấy link (Lỗi: {stream_info.get('msg')})"
+             final_stream_url = f"Không thể lấy link (Lỗi: {stream_info.get('msg')})"
         else:
             stream_url = stream_info.get("data", {}).get("128")
             if not stream_url:
-                stream_url = f"Không thể lấy link (Không có dữ liệu 128kbps)"
+                final_stream_url = f"Không thể lấy link (Không có dữ liệu 128kbps)"
             elif stream_url == "VIP":
-                stream_url = "Đây là bài hát VIP, cần tài khoản Premium."
+                final_stream_url = "Đây là bài hát VIP, cần tài khoản Premium."
+            elif stream_url.startswith("http"):
+                # === THÊM MỚI: GIẢI QUYẾT CHUYỂN HƯỚNG 302 ===
+                try:
+                    # Dùng session (là cloudscraper) để gửi yêu cầu HEAD
+                    # allow_redirects=True (mặc định) sẽ tự động đi theo link 302
+                    # stream=True để không tải file, chỉ lấy header
+                    print(f"Đang phân giải URL Zing (302): {stream_url}", file=sys.stderr)
+                    head_resp = session.head(stream_url, allow_redirects=True, timeout=5, stream=True)
+                    
+                    # head_resp.url sẽ là URL cuối cùng sau khi đã chuyển hướng
+                    final_stream_url = head_resp.url
+                    print(f"URL Zing cuối cùng: {final_stream_url}", file=sys.stderr)
+                    
+                except Exception as e:
+                    print(f"Lỗi khi phân giải URL Zing (302): {e}", file=sys.stderr)
+                    final_stream_url = stream_url # Dùng lại link cũ nếu lỗi
+                # === KẾT THÚC THÊM MỚI ===
+            else:
+                final_stream_url = stream_url # Giữ nguyên nếu không phải link http
 
         # 3. LẤY LYRIC
         lyric_info = get_lyric(song_id)
         lyric_json = []
+        lyric_file_url_final = None # Link file LRC
         
         if lyric_info.get("err") == 0 and lyric_info.get("data"):
             lyric_data = lyric_info.get("data", {})
             if lyric_data.get("lines"):
                 lyric_json = lyric_data["lines"]
             elif lyric_data.get("file"):
-                file_url = lyric_data["file"]
+                lyric_file_url_final = lyric_data["file"] # Lấy link file LRC
                 try:
-                    resp = session.get(file_url, timeout=5) 
-                    if resp.ok:
-                        lrc_content = resp.text
+                    # Chúng ta cũng nên phân giải 302 cho link lyric
+                    lrc_resp = session.head(lyric_file_url_final, allow_redirects=True, timeout=5, stream=True)
+                    lyric_file_url_final = lrc_resp.url
+                    
+                    # Tải nội dung
+                    resp_content = session.get(lyric_file_url_final, timeout=5)
+                    if resp_content.ok:
+                        lrc_content = resp_content.text
                         lyric_json = parse_lrc_to_json(lrc_content)
                 except Exception as e:
                     print(f"Lỗi khi phân tích file LRC (Zing): {e}", file=sys.stderr)
@@ -213,8 +245,9 @@ def get_zing_song_details(song_id: str) -> Dict[str, Any]:
             "artists": data.get("artistsNames", "Không rõ"),
             "author": author_names,
             "thumbnail": data.get("thumbnailM"),
-            "stream_url": stream_url,
-            "lyric_json": lyric_json 
+            "stream_url": final_stream_url, # <-- ĐÃ SỬA
+            "lyric_json": lyric_json,
+            "lyric_url": lyric_file_url_final # Trả về link lrc (đã giải quyết)
         }
         
         return full_details
@@ -224,7 +257,7 @@ def get_zing_song_details(song_id: str) -> Dict[str, Any]:
         return {"error": str(e)}
 
 # ===================================================================
-# === CÔNG CỤ YOUTUBE MUSIC (ĐÃ SỬA DÙNG YT-DLP) ===
+# === CÔNG CỤ YOUTUBE MUSIC (ĐÃ SỬA LỖI 302) ===
 # ===================================================================
 
 @server.tool()
@@ -261,8 +294,8 @@ def search_youtube_music(query: str, count: int = 5) -> List[Dict[str, str]]:
 @server.tool()
 def get_youtube_music_stream(video_id: str) -> Dict[str, Any]:
     """
-    Lấy link stream (chỉ audio) cho một video_id từ YouTube.
-    Sử dụng thư viện yt-dlp (để tránh lỗi 400).
+    Lấy link stream (chỉ audio, ĐÃ GIẢI QUYẾT 302) cho một video_id từ YouTube.
+    Sử dụng thư viện yt-dlp.
     """
     if not video_id:
         return {"error": "Thiếu video_id"}
@@ -272,9 +305,9 @@ def get_youtube_music_stream(video_id: str) -> Dict[str, Any]:
         
         # Cấu hình yt-dlp
         ydl_opts = {
-            'format': 'bestaudio[ext=mp3]/bestaudio/best', # Lấy audio M4A tốt nhất, hoặc audio tốt nhất
-            'quiet': True,        # Không in ra console
-            'noplaylist': True,   # Không xử lý playlist
+            'format': 'bestaudio[ext=m4a]/bestaudio/best', # Lấy audio M4A tốt nhất, hoặc audio tốt nhất
+            'quiet': True,
+            'noplaylist': True,
         }
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -282,24 +315,39 @@ def get_youtube_music_stream(video_id: str) -> Dict[str, Any]:
             info = ydl.extract_info(video_url, download=False)
             
             if info:
-                # Tìm định dạng (format) tốt nhất mà nó đã chọn
-                audio_url = info.get('url') # Đây là link stream trực tiếp
+                audio_url = info.get('url') # Đây là link stream yt-dlp cung cấp
                 
                 if not audio_url:
-                    # Đôi khi link nằm trong 'formats'
                     for f in info.get('formats', []):
                          if f.get('acodec') != 'none' and f.get('vcodec') == 'none':
                              audio_url = f.get('url')
                              break
                 
                 if audio_url:
+                    # === THÊM MỚI: GIẢI QUYẾT 302 CHO YOUTUBE ===
+                    final_audio_url = audio_url
+                    try:
+                        print(f"Đang phân giải URL YouTube (302): {audio_url[:50]}...", file=sys.stderr)
+                        # Dùng session (cloudscraper) để gửi yêu cầu HEAD
+                        head_resp = session.head(audio_url, allow_redirects=True, timeout=5, stream=True)
+                        
+                        # head_resp.url sẽ là URL cuối cùng sau khi đã chuyển hướng
+                        final_audio_url = head_resp.url
+                        print(f"URL YouTube cuối cùng: {final_audio_url[:50]}...", file=sys.stderr)
+                        
+                    except Exception as e:
+                        print(f"Lỗi khi phân giải URL YouTube (302): {e}", file=sys.stderr)
+                        final_audio_url = audio_url # Dùng lại link cũ nếu lỗi
+                    # === KẾT THÚC THÊM MỚI ===
+                    
                     return {
                         "id": video_id,
                         "title": info.get('title'),
                         "author": info.get('uploader', 'Không rõ'),
                         "thumbnail": info.get('thumbnail'),
-                        "stream_url": audio_url, # URL đã có chữ ký
-                        "abr": info.get('abr', 'Không rõ') # Audio Bitrate
+                        "stream_url": final_audio_url, # <-- ĐÃ SỬA
+                        "abr": info.get('abr', 'Không rõ'),
+                        "lyric_url": None # YouTube không cung cấp LRC
                     }
                 else:
                     return {"error": "Không tìm thấy audio stream trong thông tin yt-dlp."}
@@ -316,7 +364,7 @@ def get_youtube_music_stream(video_id: str) -> Dict[str, Any]:
 
 def main():
     """Hàm main để chạy server."""
-    print("Đang khởi động Music MCP Server (Zing + YouTube [yt-dlp])...")
+    print("Đang khởi động Music MCP Server (Zing + YouTube [yt-dlp] - Đã sửa lỗi 302)...")
     server.run()
 
 if __name__ == "__main__":
